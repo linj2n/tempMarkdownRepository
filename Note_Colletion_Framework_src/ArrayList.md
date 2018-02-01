@@ -6,7 +6,7 @@
 * 该变ArrayList状态的方法
 	* 增加操作：`add(E e),add(int index,E element),addAll()`
 	* 删除操作：`clear(),remove(int index),remove(Object o),removeAll(..)`
-	* 修改列表内的元素：`set( ),replaceAll( )`
+	* 修改列表内的元素：`set( )`
 	* 修改容量： `trimToSize( )`
 * 不改变ArrayList状态的方法
 	* 查询操作： `contains(Object o),get(int index),isEmpty(),indexOf(),size()
@@ -175,6 +175,158 @@ public boolean add(E e) {
 </code></pre>
 与上一个形式的`add(int index,E element)`方法类似，均调用了`ensureCapacityInternal()`方法，不同的是插入的位置固定在了最后，类似于C++容器的`push_back()`操作。
 
-## remove()方法
-ArrayList
+## remove()和clear(),retainAll()方法
+`ArrayList`提供以下`remove`方法：
+
+* 单个删除：
+	* 根据索引删除：`public E remove(int index); // 删除index位置上的元素`
+	* 根据元素值删除：`public boolean remove(object o); // 从位置0开始遍历，删除第一个与o相等的元素`
+* 批量删除：
+	* 删除所有元素：`public void clear(); // 删除ArrayList对象中所有的元素`
+	* 删除符合某条件的所有元素：
+		* `public boolean removeAll(Collection<?> c); // 给定Collection c，删除ArrayList中所有属于c的元素，即删除与c交集的元素`
+		* `public boolean retainAll(Collection<?> c); // 给定Colelction c，保留与c相交的部分，其余元素删除，即在ArrayList中保留与c的交集`
+
+### remove(int index)
+<pre><code>
+public E remove(int index) {
+    rangeCheck(index);  // 检查index合法性
+
+    modCount++; // 更新修改计数器
+    E oldValue = elementData(index);    // 保留要删除元素以返回
+
+    int numMoved = size - index - 1;    // 计算删除该元素后，所有要往前移动的元素个数
+    if (numMoved > 0)
+        System.arraycopy(elementData, index+1, elementData, index,
+                         numMoved); // [index+1..size]的元素往前移动一个位置
+    elementData[--size] = null; // 更新size，赋值最后一个元素空指针，交给GC回收
+
+    return oldValue;
+}
+</code></pre>
+
+### remove(Objcet o)
+<pre><code>
+public boolean remove(Object o) {
+    if (o == null) {    // 空指针情况，单独处理
+        for (int index = 0; index < size; index++)
+            if (elementData[index] == null) {
+                fastRemove(index);
+                return true;
+            }
+    } else {    // 调用equals方法，查找与o相等的元素的索引，根据索引删除该元素
+        for (int index = 0; index < size; index++)
+            if (o.equals(elementData[index])) {
+                fastRemove(index);
+                return true;
+            }
+    }
+    return false;
+}
+// auxiliary function
+private void fastRemove(int index) {
+    modCount++; // 更新修改计数器
+    int numMoved = size - index - 1;    // 计算删除该元素后，所有要往前移动的元素个数
+    if (numMoved > 0)
+        System.arraycopy(elementData, index+1, elementData, index,
+                         numMoved);
+    elementData[--size] = null; // 更新size，赋值最后一个元素空指针，交给GC回收
+}</code></pre>
+### clear( )
+<pre><code>
+public void clear() {
+    modCount++; // 更新修改计数器
+
+    // 将底层数组所有的元素置为空指针，交给GC回收
+    for (int i = 0; i < size; i++)
+        elementData[i] = null;
+
+    size = 0;
+}
+</code></pre>
+### removeAll(Collection<?> c) 和 retainAll(Collection<?> c)
+<pre><code>
+// 删除(this) ∩ (c)的元素
+public boolean removeAll(Collection<?> c) {
+    Objects.requireNonNull(c);
+    return batchRemove(c, false);
+}
+// 保留(this) ∩ (c)的元素
+public boolean retainAll(Collection<?> c) {
+    Objects.requireNonNull(c);
+    return batchRemove(c, true);
+}
+
+private boolean batchRemove(Collection<?> c, boolean complement) {
+    final Object[] elementData = this.elementData;
+    int r = 0, w = 0;
+    boolean modified = false;
+    try {
+        for (; r < size; r++)
+            if (c.contains(elementData[r]) == complement)
+                elementData[w++] = elementData[r];
+    } finally {
+        if (r != size) {    // try 抛出异常时，依旧保留发生异常前的操作
+            System.arraycopy(elementData, r,
+                             elementData, w,
+                             size - r);
+            w += size - r;  // 更新 w 指针
+        }
+        if (w != size) {    // 当对ArrayList做了删除操作时，对所有删除的元素置空指针，交给GC回收 
+            // clear to let GC do its work
+            for (int i = w; i < size; i++)
+                elementData[i] = null;
+            modCount += size - w;   // 更新修改计数器，修改次数为删除的元素
+            size = w;               // 更新元素个数
+            modified = true;        // 修改成功
+        }
+    }
+    return modified;
+}
+</code></pre>
+### set()方法
+<pre><code>
+public E set(int index, E element) {
+    rangeCheck(index);  // 检查index合法性
+    E oldValue = elementData(index);    // 保留原来的值以便返回
+    elementData[index] = element;   // 替换元素
+    return oldValue;
+}
+</code></pre>
+
+### indexOf(Object o) 与 lastIndexOf(Object o)
+<pre><code>
+// 返回第一个与o相等的元素的索引：从第一个元素往后开始遍历底层数组，返回值为o的索引
+public int indexOf(Object o) {
+    if (o == null) {    // 单独处理查找null的情况
+        for (int i = 0; i < size; i++)
+            if (elementData[i]==null)
+                return i;
+    } else {            // 
+        for (int i = 0; i < size; i++)
+            if (o.equals(elementData[i]))
+                return i;
+    }
+    return -1;
+}
+// 返回最后一个与o相等的元素的索引：从最后一个元素开始遍历底层数组，返回值为o的索引
+public int lastIndexOf(Object o) {
+    if (o == null) {
+        for (int i = size-1; i >= 0; i--)
+            if (elementData[i]==null)
+                return i;
+    } else {
+        for (int i = size-1; i >= 0; i--)
+            if (o.equals(elementData[i]))
+                return i;
+    }
+    return -1;
+}
+</code></pre>
+### contains()方法
+
+<pre><code>
+</code></pre>
+<pre><code></code></pre>
+<pre><code></code></pre>
 
